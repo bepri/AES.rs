@@ -1,19 +1,10 @@
-use clap::Parser;
-use num_bigint::BigInt;
-
-#[derive(Parser)]
-#[clap(author, version, about)]
-struct Args {
-    /// Key to encode/decode with
-    #[clap(short, long)]
-    key: String,
-    input: String,
-}
+use aes;
+use num_bigint::BigUint;
 
 fn main() {
-    let a = BigInt::parse_bytes(b"69c4e0d86a7b0430d8cdb78070b4c55a", 16).unwrap();
+    let a = BigUint::parse_bytes(b"000102030405060708090a0b0c0d0e0f", 16).unwrap();
 
-    println!("{}", a+1);
+    aes::encrypt(1234, &a).unwrap();
 }
 
 #[cfg(test)]
