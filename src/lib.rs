@@ -1,7 +1,7 @@
 #![allow(dead_code, unused)]
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use utiltypes::{State, Word};
+use utiltypes::{State, Word, Key};
 
 pub mod utiltypes;
 
@@ -19,15 +19,10 @@ pub fn encrypt(plaintext: u128, key: &BigUint) -> Result<u128, String> {
         _ => return Err(String::from("Invalid key size!")),
     };
 
-    println!("Mode: {}", mode);
-    println!("Conv: {}", key.to_u128().unwrap());
-
     let state = match mode {
         128 => State::from(key.to_u128().unwrap()),
         _ => State::default(),
     };
-
-    println!("{}", state);
 
     Ok(plaintext)
 }
@@ -36,7 +31,7 @@ pub fn decrypt(ciphertext: &BigUint, key: &BigUint) -> BigUint {
     todo!();
 }
 
-fn key_expansion(key: &BigUint, mode: i32) -> Word {
+fn key_expansion(key: Key, mode: i32) -> Word {
     let mut tmp: Word = Word::default();
     let mut i = 0;
     const NB: usize = 4;

@@ -1,6 +1,4 @@
-use std::fmt;
-
-use num_bigint::BigUint;
+use std::{fmt, ops::Index};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct State(pub [u8; 16]);
@@ -29,7 +27,7 @@ impl fmt::Display for State {
             for col in 0..4 {
                 write!(f, "{:02X} ", self.get(row, col));
             }
-            write!(f, "\n");
+            writeln!(f);
         }
 
         Ok(())
@@ -42,15 +40,15 @@ impl State {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
 pub struct Word(u32);
 
 impl Word {
     fn as_arr(&self) -> [u8; 4] {
         let mut res: [u8; 4] = [0; 4];
         let mut hold = self.0;
-        for i in 0..4 {
-            res[i] = (hold & 0xf) as u8;
+        for i in res.iter_mut() {
+            *i = (hold & 0xf) as u8;
             hold >>= 4;
         }
 
@@ -59,12 +57,6 @@ impl Word {
 
     fn as_word(&self) -> u32 {
         self.0
-    }
-}
-
-impl Default for Word {
-    fn default() -> Self {
-        Word(0)
     }
 }
 
@@ -88,8 +80,16 @@ pub enum Key {
     AES128([u8; 16]),
 }
 
-impl From<String> for Key {
-    fn from(input: String) -> Self {
+impl Index<usize> for Key {
+    let Output = u8;
+
+    fn index(i: usize) -> Output {
+        
+    }
+}
+
+impl From<&str> for Key {
+    fn from(input: &str) -> Self {
         let size = match input.len() {
             1..=32 => 16,
             33..=48 => 24,
@@ -97,18 +97,21 @@ impl From<String> for Key {
             _ => panic!("Invalid key size!"),
         };
 
-        let arr = vec![0u8; size];
+        let mut arr = vec![0u8; size];
 
         for (i, item) in input.as_bytes().chunks(2).enumerate() {
-            arr[i] = u8::from_str_radix(*item, 16).unwrap();
+            arr[i] = u8::from_str_radix(String::from_utf8_lossy(item).into_owned().as_str(), 16).unwrap();
         }
 
-        match size {
-            16 => Key::AES128(*arr.as_slice()),
-            24 => Key::AES192(*arr.as_slice()),
-            32 => Key::AES256(*arr.as_slice()),
-            _ => panic!("Unreachable!"),
-        }
+        println!("{:?}", arr);
+        Key::AES128([0u8; 16])
+
+        // match size {
+        //     16 => Key::AES128(arr.as_slice()),
+        //     24 => Key::AES192(*arr.as_slice()),
+        //     32 => Key::AES256(*arr.as_slice()),
+        //     _ => panic!("Unreachable!"),
+        // }
     }
 }
 
