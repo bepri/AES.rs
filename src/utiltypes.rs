@@ -1,4 +1,4 @@
-use std::{fmt, ops::Index};
+use std::{fmt, ops::BitXor};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct State(pub [u8; 16]);
@@ -38,6 +38,20 @@ impl State {
     pub fn get(&self, row: usize, col: usize) -> u8 {
         self.0[col + (row * 4)]
     }
+
+    pub fn get_mut(&mut self, row: usize, col: usize) -> &mut u8 {
+        &mut self.0[col + (row * 4)]
+    }
+
+    pub fn dump(&self) -> u128 {
+        let mut res = 0u128;
+        for i in self.0.iter() {
+            res |= *i as u128;
+            res <<= 8;
+        }
+
+        res
+    }
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
@@ -73,19 +87,19 @@ impl From<[u8; 4]> for Word {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Key {
-    AES256([u8; 32]),
-    AES192([u8; 24]),
-    AES128([u8; 16]),
+impl BitXor<Self> for Word {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self {
+        Self(self.0 ^ rhs.0)
+    }
 }
 
-impl Index<usize> for Key {
-    let Output = u8;
-
-    fn index(i: usize) -> Output {
-        
-    }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Key {
+    AES256(Vec<u8>, usize),
+    AES192(Vec<u8>, usize),
+    AES128(Vec<u8>, usize),
 }
 
 impl From<&str> for Key {
@@ -100,18 +114,18 @@ impl From<&str> for Key {
         let mut arr = vec![0u8; size];
 
         for (i, item) in input.as_bytes().chunks(2).enumerate() {
-            arr[i] = u8::from_str_radix(String::from_utf8_lossy(item).into_owned().as_str(), 16).unwrap();
+            arr[i] = match u8::from_str_radix(String::from_utf8_lossy(item).into_owned().as_str(), 16) {
+                Ok(i) => i,
+                Err(_) => panic!("Could not parse string key!"),
+            };
         }
 
-        println!("{:?}", arr);
-        Key::AES128([0u8; 16])
-
-        // match size {
-        //     16 => Key::AES128(arr.as_slice()),
-        //     24 => Key::AES192(*arr.as_slice()),
-        //     32 => Key::AES256(*arr.as_slice()),
-        //     _ => panic!("Unreachable!"),
-        // }
+        match size {
+            16 => Key::AES128(arr, size),
+            24 => Key::AES192(arr, size),
+            32 => Key::AES256(arr, size),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -130,5 +144,11 @@ mod tests {
     fn word_from() {
         let a = Word::from([1, 2, 3, 4]);        
         assert_eq!(a.as_arr(), [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn key_from() {
+        let a = Key::from("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+        assert_eq!(a, Key::AES256(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], 32));
     }
 }
