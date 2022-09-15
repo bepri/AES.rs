@@ -3,6 +3,8 @@ use utiltypes::{Key, State, Word};
 
 pub mod utiltypes;
 
+const RCON: [u8; 10] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
+
 pub fn encrypt(plaintext: u128, key: &str) -> Result<u128, String> {
     let key = Key::from(key);
     let mut state = State::from(plaintext);
@@ -92,25 +94,30 @@ fn inv_sub_bytes() {
 
 fn mix_columns(mut state: &mut State) {
     for i in 0..4 {
-        *state.get_mut(0, i) = poly_mult(0x02, state.get(0, i))
-            ^ poly_mult(0x03, state.get(1, i))
-            ^ state.get(2, i)
-            ^ state.get(3, i);
+        let a = poly_mult(0x02, state.get(0, i))
+                  ^ poly_mult(0x03, state.get(1, i))
+                  ^ state.get(2, i)
+                  ^ state.get(3, i);
 
-        *state.get_mut(1, i) = state.get(0, i)
-            ^ poly_mult(0x02, state.get(1, i))
-            ^ poly_mult(0x03, state.get(2, i))
-            ^ state.get(3, i);
+        let b = state.get(0, i)
+                  ^ poly_mult(0x02, state.get(1, i))
+                  ^ poly_mult(0x03, state.get(2, i))
+                  ^ state.get(3, i);
 
-        *state.get_mut(2, i) = state.get(0, i)
-            ^ state.get(1, i)
-            ^ poly_mult(0x02, state.get(2, i))
-            ^ poly_mult(0x03, state.get(3, i));
+        let c = state.get(0, i)
+                  ^ state.get(1, i)
+                  ^ poly_mult(0x02, state.get(2, i))
+                  ^ poly_mult(0x03, state.get(3, i));
 
-        *state.get_mut(3, i) = poly_mult(0x03, state.get(0, i))
-            ^ state.get(1, i)
-            ^ state.get(2, i)
-            ^ poly_mult(0x02, state.get(3, i));
+        let d = poly_mult(0x03, state.get(0, i))
+                  ^ state.get(1, i)
+                  ^ state.get(2, i)
+                  ^ poly_mult(0x02, state.get(3, i));
+
+        *state.get_mut(0, i) = a;
+        *state.get_mut(1, i) = b;
+        *state.get_mut(2, i) = c;
+        *state.get_mut(3, i) = d;
     }
 }
 
