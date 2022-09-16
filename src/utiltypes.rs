@@ -129,6 +129,16 @@ impl From<&str> for Key {
     }
 }
 
+impl Key {
+    pub fn sizes(&self) -> (usize, usize) {
+        match self {
+            Key::AES128(_, _) => (10usize, 4usize),
+            Key::AES192(_, _) => (12usize, 6usize),
+            Key::AES256(_, _) => (14usize, 8usize),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]

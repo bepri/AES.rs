@@ -9,11 +9,8 @@ pub fn encrypt(plaintext: u128, key: &str) -> Result<u128, String> {
     let key = Key::from(key);
     let mut state = State::from(plaintext);
 
-    let (Nr, Nk) = match key {
-        Key::AES128(_, size) => (10usize, 4usize),
-        Key::AES192(_, size) => (12usize, 6usize),
-        Key::AES256(_, size) => (14usize, 8usize),
-    };
+    let (Nr, Nk) = key.sizes();
+
     let Nb: usize = 4;
 
     for round in 1..=Nr {
@@ -34,41 +31,36 @@ pub fn decrypt(ciphertext: u128, key: &str) -> Result<u128, String> {
 }
 
 fn key_expansion(key: Key, mode: i32) -> Word {
+    let (Nr, Nk) = key.sizes();
+
     let mut tmp: Word = Word::default();
     let mut i: usize = 0;
     const NB: usize = 4;
-    let nk: usize = match mode {
-        128 => 4,
-        192 => 6,
-        256 => 8,
-        _ => unreachable!(),
-    };
 
-    // Selecting Nr = 10 here.
-    let mut w: Vec<Word> = vec![Word::default(); NB * 11];
+    let mut w: Vec<Word> = vec![Word::default(); NB * (Nr + 1)];
 
     match key {
         Key::AES128(arr, size) | Key::AES192(arr, size) | Key::AES256(arr, size) => {
             let nk = size / 4;
 
-            while (i < nk) {
+            while (i < Nk) {
                 w[i] = Word::from([arr[4 * i], arr[4 * i + 1], arr[4 * i + 2], arr[4 * i + 3]]);
                 i += 1;
             }
 
-            i = nk;
+            i = Nk;
 
-            // Again, 11 = Nr+1 for Nr=10
-            while (i < NB * 11) {
+            while (i < NB * (Nr + 1)) {
                 tmp = w[i - 1];
-                if ((i % nk) == 0) {
+                if ((i % Nk) == 0) {
                     // TODO: pls god finish this
                     // tmp = sub_word(rot_word(tmp)) ^ todo!();
-                } else if (nk > 6 && i % nk == 4) {
+                } else if (Nk > 6 && i % Nk == 4) {
                     tmp = sub_word(tmp);
                 }
 
-                w[i] = w[i - nk] ^ tmp;
+                w[i] = w[i - Nk] ^ tmp;
+                i += 1;
             }
         }
     }
@@ -154,7 +146,7 @@ fn poly_mult(mut a: u8, mut b: u8) -> u8 {
 fn xtime(a: u8) -> u8 {
     match a & 0x80 {
         0 => a << 1,
-        1 => (a << 1) ^ 0x1b,
+        0x80 => (a << 1) ^ 0x1b,
         _ => unreachable!(),
     }
 }
