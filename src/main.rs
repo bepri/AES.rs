@@ -1,13 +1,5 @@
-use aes::utiltypes::Key;
+use aes::{cipher, invcipher};
 
 fn main() {
-    _ = Key::from("000102030405060708090a0b0c0d0e0f");
-}
-
-#[cfg(test)]
-mod tests {
-    #[allow(unused_imports)]
-    use super::*;
-
-    
+    invcipher(cipher("00112233445566778899aabbccddeeff", "000102030405060708090a0b0c0d0e0f").as_str(), "000102030405060708090a0b0c0d0e0f");
 }
