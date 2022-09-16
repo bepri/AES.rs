@@ -1,8 +1,9 @@
-#![allow(non_snake_case, unused)]
+#![allow(non_snake_case)]
 use utiltypes::{Key, State};
 
 pub mod utiltypes;
 
+/// Round constants, from [USERLAB Useful Arrays](https://userlab.utk.edu/courses/cosc483/resources/aes-arrays)
 const RCON: [u32; 52] = [
     0x00000000, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000,
     0x80000000, 0x1B000000, 0x36000000, 0x6C000000, 0xD8000000, 0xAB000000, 0x4D000000, 0x9A000000,
@@ -13,6 +14,7 @@ const RCON: [u32; 52] = [
     0x74000000, 0xE8000000, 0xCB000000, 0x8D000000,
 ];
 
+/// Substitution characters to shuffle all bytes, from [USERLAB Helpful Arrays](https://userlab.utk.edu/courses/cosc483/resources/aes-arrays)
 const SBOX: [u8; 256] = [
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
     0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
@@ -32,6 +34,7 @@ const SBOX: [u8; 256] = [
     0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16,
 ];
 
+/// Inverse substitution characters to unshuffle all bytes, from [USERLAB Helpful Arrays](https://userlab.utk.edu/courses/cosc483/resources/aes-arrays)
 const INVSBOX: [u8; 256] = [
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
     0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
@@ -51,6 +54,11 @@ const INVSBOX: [u8; 256] = [
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 ];
 
+/**
+Takes a 128-bit plaintext (padding if necessary to reach 128) and a key of 128, 192, or 256 bits (again padding to ceiling).
+
+Returns a 128-bit AES ciphertext.
+*/
 pub fn cipher(plaintext: &str, key: &str) -> String {
     let key = Key::from(key);
     let mut state = State::from(plaintext);
@@ -90,6 +98,77 @@ pub fn cipher(plaintext: &str, key: &str) -> String {
     state.as_str()
 }
 
+/// AES mix columns protocol. Internal use only.
+fn mix_columns(state: &mut State) {
+    for i in 0..4 {
+        let a = ff_add(
+            ff_add(
+                ff_add(
+                    ff_multiply(0x02, state.get(i, 0)),
+                    ff_multiply(0x03, state.get(i, 1)),
+                ),
+                state.get(i, 2),
+            ),
+            state.get(i, 3),
+        );
+
+        let b = ff_add(
+            ff_add(
+                ff_add(state.get(i, 0), ff_multiply(0x02, state.get(i, 1))),
+                ff_multiply(0x03, state.get(i, 2)),
+            ),
+            state.get(i, 3),
+        );
+
+        let c = ff_add(
+            ff_add(
+                ff_add(state.get(i, 0), state.get(i, 1)),
+                ff_multiply(0x02, state.get(i, 2)),
+            ),
+            ff_multiply(0x03, state.get(i, 3)),
+        );
+
+        let d = ff_add(
+            ff_add(
+                ff_add(ff_multiply(0x03, state.get(i, 0)), state.get(i, 1)),
+                state.get(i, 2),
+            ),
+            ff_multiply(0x02, state.get(i, 3)),
+        );
+
+        *state.get_mut(i, 0) = a;
+        *state.get_mut(i, 1) = b;
+        *state.get_mut(i, 2) = c;
+        *state.get_mut(i, 3) = d;
+    }
+}
+
+/// AES shift rows protocol. Internal use only.
+fn shift_rows(state: &mut State) {
+    let mut tmp = [0u8; 4];
+    for i in 1..4 {
+        for j in 0..4 {
+            tmp[j] = state.get(j, i);
+        }
+
+        for j in 0..4 {
+            *state.get_mut(j, i) = tmp[(i + j) % 4];
+        }
+    }
+}
+
+/// AES sub bytes protocol. Internal use only.
+fn sub_bytes(state: &mut State) {
+    for i in state.0.iter_mut() {
+        *i = SBOX[*i as usize];
+    }
+}
+
+/**
+Takes a 128-bit AES ciphertext (padding if necessary to reach 128) and a key of 128, 192, or 256 bits (again padding to ceiling).
+
+Returns a 128-bit plaintext.
+*/
 pub fn invcipher(ciphertext: &str, key: &str) -> String {
     let key = Key::from(key);
     let mut state = State::from(ciphertext);
@@ -98,82 +177,83 @@ pub fn invcipher(ciphertext: &str, key: &str) -> String {
 
     let w = key_expansion(key);
 
-    println!("round[ 0].iinput    {:0>32x}", state.dump());
-    print!("round[ 0].ik_sch    ");
-    print_words(&w, 0);
+    println!("round[ 0].iinput   {:0>32x}", state.dump());
+    print!("round[ 0].ik_sch   ");
+    print_words(&w, Nr);
 
+    add_round_key(&mut state, &w, Nr);
+    for round in (1..Nr).rev() {
+        println!("round[{:2}].istart   {:0>32x}", Nr - round, state.dump());
+        inv_shift_rows(&mut state);
+        println!("round[{:2}].is_row   {:0>32x}", Nr - round, state.dump());
+        inv_sub_bytes(&mut state);
+        println!("round[{:2}].is_box   {:0>32x}", Nr - round, state.dump());
+        add_round_key(&mut state, &w, round);
+        print!("round[{:2}].ik_sch   ", Nr - round);
+        print_words(&w, round);
+        println!("round[{:2}].ik_add   {:0>32x}", Nr - round, state.dump());
+        inv_mix_columns(&mut state);
+    }
+
+    println!("round[{:2}].istart   {:0>32x}", Nr, state.dump());
+    inv_shift_rows(&mut state);
+    println!("round[{:2}].is_row   {:0>32x}", Nr, state.dump());
+    inv_sub_bytes(&mut state);
+    println!("round[{:2}].is_box   {:0>32x}", Nr, state.dump());
     add_round_key(&mut state, &w, 0);
-    println!("{:0>32x}", state.dump());
+    print!("round[{:2}].ik_sch   ", Nr);
+    print_words(&w, 0);
+    println!("round[{:2}].ioutput  {:0>32x}", Nr, state.dump());
 
     state.as_str()
 }
 
-fn key_expansion(inputkey: Key) -> Vec<u32> {
-    let (Nr, Nk) = inputkey.sizes();
-
-    let mut tmp: u32;
-    let mut i: usize = 0;
-    const NB: usize = 4;
-
-    let mut w: Vec<u32> = vec![0u32; NB * (Nr + 1)];
-
-    match inputkey {
-        Key::AES128(key, size) | Key::AES192(key, size) | Key::AES256(key, size) => {
-            while (i < Nk) {
-                w[i] =
-                    word_from_bytes([key[4 * i + 3], key[4 * i + 2], key[4 * i + 1], key[4 * i]]);
-                i += 1;
-            }
-
-            i = Nk;
-
-            while (i < NB * (Nr + 1)) {
-                tmp = w[i - 1];
-                if ((i % Nk) == 0) {
-                    tmp = sub_word(rot_word(tmp)) ^ RCON[i / Nk];
-                } else if (Nk > 6 && i % Nk == 4) {
-                    tmp = sub_word(tmp);
-                }
-
-                w[i] = w[i - Nk] ^ tmp;
-                i += 1;
-            }
-        }
-    }
-
-    w
-}
-
-fn add_round_key(state: &mut State, w: &Vec<u32>, round: usize) {
+/// AES inverse mix columns protocol. Internal use only.
+fn inv_mix_columns(state: &mut State) {
     for i in 0..4 {
-        let key = bytes_from_word(w[(round * 4) + i]);
-        for j in 0..4 {
-            *state.get_mut(i, j) ^= key[3-j];
-        }
-    }
-}
+        let a = ff_add(
+            ff_add(
+                ff_add(
+                    ff_multiply(0x0e, state.get(i, 0)),
+                    ff_multiply(0x0b, state.get(i, 1)),
+                ),
+                ff_multiply(0x0d, state.get(i, 2)),
+            ),
+            ff_multiply(0x09, state.get(i, 3)),
+        );
 
-fn inv_mix_columns(mut state: &mut State) {
-    for i in 0..4 {
-        let a = poly_mult(0x0e, state.get(i, 0))
-                  ^ poly_mult(0x0b, state.get(i, 1))
-                  ^ poly_mult(0x0d, state.get(i, 2))
-                  ^ poly_mult(0x09, state.get(i, 3));
+        let b = ff_add(
+            ff_add(
+                ff_add(
+                    ff_multiply(0x09, state.get(i, 0)),
+                    ff_multiply(0x0e, state.get(i, 1)),
+                ),
+                ff_multiply(0x0b, state.get(i, 2)),
+            ),
+            ff_multiply(0x0d, state.get(i, 3)),
+        );
 
-        let b = poly_mult(0x09, state.get(i, 0))
-                  ^ poly_mult(0x0e, state.get(i, 1))
-                  ^ poly_mult(0x0b, state.get(i, 2))
-                  ^ poly_mult(0x0d, state.get(i, 3));
+        let c = ff_add(
+            ff_add(
+                ff_add(
+                    ff_multiply(0x0d, state.get(i, 0)),
+                    ff_multiply(0x09, state.get(i, 1)),
+                ),
+                ff_multiply(0x0e, state.get(i, 2)),
+            ),
+            ff_multiply(0x0b, state.get(i, 3)),
+        );
 
-        let c = poly_mult(0x0d, state.get(i, 0))
-                  ^ poly_mult(0x09, state.get(i, 1))
-                  ^ poly_mult(0x0e, state.get(i, 2))
-                  ^ poly_mult(0x0b, state.get(i, 3));
-
-        let d = poly_mult(0x0b, state.get(i, 0))
-                  ^ poly_mult(0x0d, state.get(i, 1))
-                  ^ poly_mult(0x09, state.get(i, 2))
-                  ^ poly_mult(0x0e, state.get(i, 3));
+        let d = ff_add(
+            ff_add(
+                ff_add(
+                    ff_multiply(0x0b, state.get(i, 0)),
+                    ff_multiply(0x0d, state.get(i, 1)),
+                ),
+                ff_multiply(0x09, state.get(i, 2)),
+            ),
+            ff_multiply(0x0e, state.get(i, 3)),
+        );
 
         *state.get_mut(i, 0) = a;
         *state.get_mut(i, 1) = b;
@@ -182,7 +262,8 @@ fn inv_mix_columns(mut state: &mut State) {
     }
 }
 
-fn inv_shift_rows(mut state: &mut State) {
+/// AES inverse shift rows protocol. Internal use only.
+fn inv_shift_rows(state: &mut State) {
     let mut tmp = [0u8; 4];
     for i in 1..4 {
         for j in 0..4 {
@@ -190,47 +271,20 @@ fn inv_shift_rows(mut state: &mut State) {
         }
 
         for j in 0..4 {
-            *state.get_mut(j, i) = tmp[3 - ((i + j) % 4)];
+            *state.get_mut(j, i) = tmp[(4 + j - i) % 4];
         }
     }
 }
 
-fn inv_sub_bytes(mut state: &mut State) {
+/// AES inverse sub bytes protocol. Internal use only.
+fn inv_sub_bytes(state: &mut State) {
     for i in state.0.iter_mut() {
         *i = INVSBOX[*i as usize];
     }
 }
 
-fn mix_columns(mut state: &mut State) {
-    for i in 0..4 {
-        let a = poly_mult(0x02, state.get(i, 0))
-            ^ poly_mult(0x03, state.get(i, 1))
-            ^ state.get(i, 2)
-            ^ state.get(i, 3);
-    
-        let b = state.get(i, 0)
-            ^ poly_mult(0x02, state.get(i, 1))
-            ^ poly_mult(0x03, state.get(i, 2))
-            ^ state.get(i, 3);
-    
-        let c = state.get(i, 0)
-            ^ state.get(i, 1)
-            ^ poly_mult(0x02, state.get(i, 2))
-            ^ poly_mult(0x03, state.get(i, 3));
-    
-        let d = poly_mult(0x03, state.get(i, 0))
-            ^ state.get(i, 1)
-            ^ state.get(i, 2)
-            ^ poly_mult(0x02, state.get(i, 3));
-    
-        *state.get_mut(i, 0) = a;
-        *state.get_mut(i, 1) = b;
-        *state.get_mut(i, 2) = c;
-        *state.get_mut(i, 3) = d;
-    }
-}
-
-fn rot_word(mut input: u32) -> u32 {
+/// AES word rotation protocol. Internal use only.
+fn rot_word(input: u32) -> u32 {
     let mut bytes = bytes_from_word(input);
 
     let tmp = bytes[0];
@@ -247,26 +301,55 @@ fn rot_word(mut input: u32) -> u32 {
     word_from_bytes(bytes)
 }
 
-fn shift_rows(mut state: &mut State) {
-    let mut tmp = [0u8; 4];
-    for i in 1..4 {
-        for j in 0..4 {
-            tmp[j] = state.get(j, i);
-        }
+/// AES key expansion protocol. Internal use only.
+fn key_expansion(inputkey: Key) -> Vec<u32> {
+    let (Nr, Nk) = inputkey.sizes();
 
+    let mut tmp: u32;
+    let mut i: usize = 0;
+    const NB: usize = 4;
+
+    let mut w: Vec<u32> = vec![0u32; NB * (Nr + 1)];
+
+    match inputkey {
+        Key::AES128(key, _) | Key::AES192(key, _) | Key::AES256(key, _) => {
+            while i < Nk {
+                w[i] =
+                    word_from_bytes([key[4 * i + 3], key[4 * i + 2], key[4 * i + 1], key[4 * i]]);
+                i += 1;
+            }
+
+            i = Nk;
+
+            while i < NB * (Nr + 1) {
+                tmp = w[i - 1];
+                if (i % Nk) == 0 {
+                    tmp = sub_word(rot_word(tmp)) ^ RCON[i / Nk];
+                } else if Nk > 6 && i % Nk == 4 {
+                    tmp = sub_word(tmp);
+                }
+
+                w[i] = w[i - Nk] ^ tmp;
+                i += 1;
+            }
+        }
+    }
+
+    w
+}
+
+// AES round key protocol. Internal use only.
+fn add_round_key(state: &mut State, w: &Vec<u32>, round: usize) {
+    for i in 0..4 {
+        let key = bytes_from_word(w[(round * 4) + i]);
         for j in 0..4 {
-            *state.get_mut(j, i) = tmp[(i + j) % 4];
+            *state.get_mut(i, j) ^= key[3 - j];
         }
     }
 }
 
-fn sub_bytes(mut state: &mut State) {
-    for i in state.0.iter_mut() {
-        *i = SBOX[*i as usize];
-    }
-}
-
-fn sub_word(mut input: u32) -> u32 {
+/// AES sub word protocol. Internal use only.
+fn sub_word(input: u32) -> u32 {
     let bytes = bytes_from_word(input);
     SBOX[bytes[0] as usize] as u32
         | (SBOX[bytes[1] as usize] as u32) << 8
@@ -274,10 +357,16 @@ fn sub_word(mut input: u32) -> u32 {
         | (SBOX[bytes[3] as usize] as u32) << 24
 }
 
-fn poly_mult(mut a: u8, mut b: u8) -> u8 {
+/// Finite-field addition. Returns a + b.
+fn ff_add(a: u8, b: u8) -> u8 {
+    a ^ b
+}
+
+/// Finite-field multiplication. Returns a * b.
+fn ff_multiply(mut a: u8, mut b: u8) -> u8 {
     let mut res = 0u8;
-    while (a != 0 && b != 0) {
-        if (b & 1 == 1) {
+    while a != 0 && b != 0 {
+        if b & 1 == 1 {
             res ^= a;
         }
 
@@ -288,6 +377,7 @@ fn poly_mult(mut a: u8, mut b: u8) -> u8 {
     res
 }
 
+/// Finite-field multiplication xtime implementation.
 fn xtime(a: u8) -> u8 {
     match a & 0x80 {
         0 => a << 1,
@@ -296,10 +386,12 @@ fn xtime(a: u8) -> u8 {
     }
 }
 
+/// Taking an array of 4 bytes, return a 32-bit word of the assembled bytes.
 fn word_from_bytes(bytes: [u8; 4]) -> u32 {
     bytes[0] as u32 | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16 | (bytes[3] as u32) << 24
 }
 
+/// Taking in a u32-bit word, disassemble it into an array of 4 bytes.
 fn bytes_from_word(word: u32) -> [u8; 4] {
     [
         (word & 0xff).try_into().unwrap(),
@@ -309,15 +401,16 @@ fn bytes_from_word(word: u32) -> [u8; 4] {
     ]
 }
 
+/// Print a specific word from the AES round key.
 fn print_words(w: &Vec<u32>, index: usize) {
     for i in 0..4 {
-        print!("{:08x}", w[index*4 + i]);
+        print!("{:08x}", w[index * 4 + i]);
     }
     println!();
 }
 
 #[cfg(test)]
-mod tests {
+mod lib_tests {
     use super::*;
 
     #[test]
@@ -329,8 +422,8 @@ mod tests {
     }
 
     #[test]
-    fn poly_mult_tests() {
-        assert_eq!(poly_mult(0x57, 0x13), 0xfe);
+    fn ff_multiply_tests() {
+        assert_eq!(ff_multiply(0x57, 0x13), 0xfe);
     }
 
     #[test]
@@ -365,6 +458,7 @@ mod tests {
     }
 
     #[test]
+    /// Currently fails due to a mixup of rows and columns, but actual functionality of the program is fine.
     fn big_test_lol() {
         let mut state = State([
             0x19, 0xa0, 0x9a, 0xe9, 0x3d, 0xf4, 0xc6, 0xf8, 0xe3, 0xe2, 0x8d, 0x48, 0xbe, 0x2b,
@@ -405,21 +499,20 @@ mod tests {
             &key_expansion(Key::from("2b7e151628aed2a6abf7158809cf4f3c")),
             1,
         );
-        assert_eq!(state.0, round.0);
+        assert_eq!(state, round);
     }
 
     #[test]
     fn cipher_test() {
-        let input = State([
-            0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34,
-        ]);
-
         let result = State([
             0x39, 0x25, 0x84, 0x1d, 0x02, 0xdc, 0x09, 0xfb, 0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a,
             0x0b, 0x32,
         ]);
 
-        let output = cipher("3243f6a8885a308d313198a2e0370734", "2b7e151628aed2a6abf7158809cf4f3c");
+        let output = cipher(
+            "3243f6a8885a308d313198a2e0370734",
+            "2b7e151628aed2a6abf7158809cf4f3c",
+        );
 
         assert_eq!(output, result.as_str());
     }

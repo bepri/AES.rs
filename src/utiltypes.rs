@@ -1,4 +1,4 @@
-use std::{fmt, ops::BitXor};
+use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct State(pub [u8; 16]);
@@ -27,9 +27,15 @@ impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for row in 0..4 {
             for col in 0..4 {
-                write!(f, "{:02X} ", self.get(row, col));
+                match write!(f, "{:02X} ", self.get(row, col)) {
+                    Ok(_) => (),
+                    Err(_) => panic!("Failed to print out state!"),
+                }
             }
-            writeln!(f);
+            match writeln!(f) {
+                Ok(_) => (),
+                Err(_) => panic!("Failed to print out state!"),
+            }
         }
 
         Ok(())
@@ -72,7 +78,10 @@ impl fmt::Display for Key {
         match self {
             Self::AES128(arr, _) | Self::AES192(arr, _) | Self::AES256(arr, _) => {
                 for i in arr {
-                    write!(f, "{:02X} ", i);
+                    match write!(f, "{:02X} ", i) {
+                        Ok(_) => (),
+                        Err(_) => panic!("Failed to print out key!"),
+                    }
                 }
             }
         }
@@ -120,7 +129,7 @@ impl Key {
 }
 
 #[cfg(test)]
-mod tests {
+mod util_tests {
     #[allow(unused_imports)]
     use super::*;
 
