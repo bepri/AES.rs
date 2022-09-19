@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub struct State(pub [u8; 16]);
 
 impl From<&str> for State {
@@ -14,12 +14,6 @@ impl From<&str> for State {
         }
 
         Self(state)
-    }
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self([0u8; 16])
     }
 }
 

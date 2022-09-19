@@ -69,7 +69,7 @@ pub fn cipher(plaintext: &str, key: &str) -> String {
 
     println!("round[ 0].input    {:0>32x}", state.dump());
     print!("round[ 0].k_sch    ");
-    print_words(&w, 0);
+    print_words(w, 0);
 
     add_round_key(&mut state, w, 0);
 
@@ -93,7 +93,7 @@ pub fn cipher(plaintext: &str, key: &str) -> String {
     println!("round[{:2}].s_row    {:0>32x}", Nr, state.dump());
     add_round_key(&mut state, w, Nr);
     print!("round[{:2}].k_sch    ", Nr);
-    print_words(&w, Nr);
+    print_words(w, Nr);
     println!("round[{:2}].output   {:0>32x}", Nr, state.dump());
     state.as_str()
 }
@@ -147,8 +147,8 @@ fn mix_columns(state: &mut State) {
 fn shift_rows(state: &mut State) {
     let mut tmp = [0u8; 4];
     for i in 1..4 {
-        for j in 0..4 {
-            tmp[j] = state.get(j, i);
+        for (j, item) in tmp.iter_mut().enumerate() {
+            *item = state.get(j, i);
         }
 
         for j in 0..4 {
@@ -266,8 +266,8 @@ fn inv_mix_columns(state: &mut State) {
 fn inv_shift_rows(state: &mut State) {
     let mut tmp = [0u8; 4];
     for i in 1..4 {
-        for j in 0..4 {
-            tmp[j] = state.get(j, i);
+        for (j, item) in tmp.iter_mut().enumerate() {
+            *item = state.get(j, i);
         }
 
         for j in 0..4 {
@@ -339,7 +339,7 @@ fn key_expansion(inputkey: Key) -> Vec<u32> {
 }
 
 // AES round key protocol. Internal use only.
-fn add_round_key(state: &mut State, w: &Vec<u32>, round: usize) {
+fn add_round_key(state: &mut State, w: &[u32], round: usize) {
     for i in 0..4 {
         let key = bytes_from_word(w[(round * 4) + i]);
         for j in 0..4 {
@@ -402,7 +402,7 @@ fn bytes_from_word(word: u32) -> [u8; 4] {
 }
 
 /// Print a specific word from the AES round key.
-fn print_words(w: &Vec<u32>, index: usize) {
+fn print_words(w: &[u32], index: usize) {
     for i in 0..4 {
         print!("{:08x}", w[index * 4 + i]);
     }
